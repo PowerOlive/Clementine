@@ -64,8 +64,10 @@ class DigitallyImportedServiceBase : public InternetService {
   void SongFromChannel(const DigitallyImportedClient::Channel& channel,
                        Song* song) const;
 
+  bool ConfigRequired() override { return !is_premium_account(); }
+
  public slots:
-  void ShowSettingsDialog();
+  void ShowConfig() override;
 
  signals:
   void StreamsChanged();

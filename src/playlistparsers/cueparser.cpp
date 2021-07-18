@@ -31,7 +31,8 @@
 
 const char* CueParser::kFileLineRegExp =
     "(\\S+)\\s+(?:\"([^\"]+)\"|(\\S+))\\s*(?:\"([^\"]+)\"|(\\S+))?";
-const char* CueParser::kIndexRegExp = "(\\d{2,3}):(\\d{2}):(\\d{2})";
+// Most cue specs specify mm:ss:ff, but we can be more flexible here.
+const char* CueParser::kIndexRegExp = "(\\d{1,3}):(\\d{2}):(\\d{2})";
 
 const char* CueParser::kPerformer = "performer";
 const char* CueParser::kTitle = "title";
@@ -336,6 +337,7 @@ bool CueParser::UpdateLastSong(const CueEntry& entry, Song* song) const {
 qint64 CueParser::IndexToMarker(const QString& index) const {
   QRegExp index_regexp(kIndexRegExp);
   if (!index_regexp.exactMatch(index)) {
+    qLog(Warning) << "Could not parse index" << index;
     return -1;
   }
 
@@ -348,7 +350,9 @@ qint64 CueParser::IndexToMarker(const QString& index) const {
 
 void CueParser::Save(const SongList& songs, QIODevice* device, const QDir& dir,
                      Playlist::Path path_type) const {
-  // TODO
+  // TODO: Not yet implemented. Cue files represent tracks within a single
+  //       file, so the song list would need to be composed properly.
+  emit Error(tr("Saving cue files is not yet supported."));
 }
 
 // Looks for a track starting with one of the .cue's keywords.

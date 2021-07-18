@@ -58,6 +58,8 @@ GlobalShortcuts::GlobalShortcuts(QWidget* parent)
               SIGNAL(StopAfter()));
   AddShortcut("next_track", tr("Next track"), SIGNAL(Next()),
               QKeySequence(Qt::Key_MediaNext));
+  AddShortcut("next_album", tr("Next album"), SIGNAL(NextAlbum()),
+              QKeySequence(Qt::Key_MediaNext + Qt::SHIFT));
   AddShortcut("prev_track", tr("Previous track"), SIGNAL(Previous()),
               QKeySequence(Qt::Key_MediaPrevious));
   AddShortcut("inc_volume", tr("Increase volume"), SIGNAL(IncVolume()));
@@ -117,7 +119,7 @@ void GlobalShortcuts::AddRatingShortcut(const QString& id, const QString& name,
                                         const QKeySequence& default_key) {
   Shortcut shortcut = AddShortcut(id, name, default_key);
   connect(shortcut.action, &QAction::triggered,
-          [this, rating]() { RateCurrentSong(rating); });
+          [this, rating]() { emit RateCurrentSong(rating); });
 }
 
 GlobalShortcuts::Shortcut GlobalShortcuts::AddShortcut(

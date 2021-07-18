@@ -22,6 +22,7 @@
 #include <QFileDialog>
 #include <QFileSystemModel>
 #include <QLinearGradient>
+#include <QList>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
@@ -861,6 +862,8 @@ MainWindow::MainWindow(Application* app, SystemTrayIcon* tray_icon, OSD* osd,
   connect(global_shortcuts_, SIGNAL(StopAfter()),
           ui_->action_stop_after_this_track, SLOT(trigger()));
   connect(global_shortcuts_, SIGNAL(Next()), ui_->action_next_track,
+          SLOT(trigger()));
+  connect(global_shortcuts_, SIGNAL(NextAlbum()), ui_->action_next_album,
           SLOT(trigger()));
   connect(global_shortcuts_, SIGNAL(Previous()), ui_->action_previous_track,
           SLOT(trigger()));
@@ -2217,15 +2220,10 @@ void MainWindow::AddStreamAccepted() {
 void MainWindow::OpenRipCDDialog() {
 #ifdef HAVE_AUDIOCD
   if (!rip_cd_dialog_) {
-    rip_cd_dialog_.reset(new RipCDDialog);
+    Q_ASSERT(app_->device_manager());
+    rip_cd_dialog_.reset(new RipCDDialog(app_->device_manager()));
   }
-  if (rip_cd_dialog_->CheckCDIOIsValid()) {
-    rip_cd_dialog_->show();
-  } else {
-    QMessageBox cdio_fail(QMessageBox::Critical, tr("Error"),
-                          tr("Failed reading CD drive"));
-    cdio_fail.exec();
-  }
+  rip_cd_dialog_->show();
 #endif
 }
 

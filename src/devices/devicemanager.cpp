@@ -38,7 +38,6 @@
 #include "core/utilities.h"
 #include "devicedatabasebackend.h"
 #include "deviceinfo.h"
-#include "devicekitlister.h"
 #include "devicestatefiltermodel.h"
 #include "filesystemdevice.h"
 #include "ui/iconloader.h"
@@ -96,9 +95,6 @@ DeviceManager::DeviceManager(Application* app, QObject* parent)
 // CD devices are detected via the DiskArbitration framework instead on Darwin.
 #if defined(HAVE_AUDIOCD) && !defined(Q_OS_DARWIN)
   AddLister(new CddaLister);
-#endif
-#ifdef HAVE_DEVICEKIT
-  AddLister(new DeviceKitLister);
 #endif
 #ifdef HAVE_UDISKS2
   AddLister(new Udisks2Lister);
@@ -195,7 +191,6 @@ QVariant DeviceManager::data(const QModelIndex& idx, int role) const {
 
       if (info->size_)
         text = text + QString(" (%1)").arg(Utilities::PrettySize(info->size_));
-      if (info->device_.get()) info->device_->Refresh();
       return text;
     }
 
@@ -350,6 +345,26 @@ DeviceInfo* DeviceManager::FindEquivalentDevice(DeviceInfo* info) const {
     if (match) return match;
   }
   return nullptr;
+}
+
+QList<DeviceInfo*> DeviceManager::FindDevicesByUrlSchemes(
+    QStringList url_schemes) const {
+  QList<DeviceInfo*> matches;
+  for (DeviceInfo* device_info : devices_) {
+    for (const DeviceInfo::Backend& backend : device_info->backends_) {
+      if (!backend.lister_) continue;
+
+      QList<QUrl> device_urls =
+          backend.lister_->MakeDeviceUrls(backend.unique_id_);
+      for (const QUrl& url : device_urls) {
+        if (url_schemes.contains(url.scheme())) {
+          matches << device_info;
+          break;
+        }
+      }
+    }
+  }
+  return matches;
 }
 
 void DeviceManager::PhysicalDeviceAdded(const QString& id) {
@@ -562,7 +577,12 @@ std::shared_ptr<ConnectedDevice> DeviceManager::Connect(DeviceInfo* info) {
   if (!ret) {
     qLog(Warning) << "Could not create device for" << device_url.toString();
   } else {
-    ret->Init();
+    if (!ret->Init()) {
+      qLog(Warning) << "Could not initialize device for "
+                    << device_url.toString();
+      ret.reset();
+      return ret;
+    }
 
     info->device_ = ret;
     QModelIndex idx = ItemToIndex(info);
@@ -661,7 +681,7 @@ void DeviceManager::Forget(QModelIndex idx) {
     info->LoadIcon(info->BestBackend()->lister_->DeviceIcons(id),
                    info->friendly_name_);
 
-    dataChanged(idx, idx);
+    emit dataChanged(idx, idx);
   }
 }
 

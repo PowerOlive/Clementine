@@ -27,13 +27,17 @@
 #include "core/timeconstants.h"
 
 CddaSongLoader::CddaSongLoader(const QUrl& url, QObject* parent)
-    : QObject(parent), url_(url), cdda_(nullptr), cdio_(nullptr) {
+    : QObject(parent), url_(url), cdda_(nullptr), may_load_(true) {
   connect(this, SIGNAL(MusicBrainzDiscIdLoaded(const QString&)),
           SLOT(LoadAudioCDTags(const QString&)));
 }
 
 CddaSongLoader::~CddaSongLoader() {
-  if (cdio_) cdio_destroy(cdio_);
+  // The LoadSongsFromCdda methods runs concurrently in a thread and we need to
+  // wait for it to terminate. There's no guarantee that it has terminated when
+  // destructor is invoked.
+  may_load_ = false;
+  loading_future_.waitForFinished();
 }
 
 QUrl CddaSongLoader::GetUrlFromTrack(int track_number) const {
@@ -46,15 +50,19 @@ QUrl CddaSongLoader::GetUrlFromTrack(int track_number) const {
   return CddaDevice::TrackStrToUrl(track);
 }
 
+bool CddaSongLoader::IsActive() const { return loading_future_.isRunning(); }
+
 void CddaSongLoader::LoadSongs() {
-  QtConcurrent::run(this, &CddaSongLoader::LoadSongsFromCdda);
-}
-void CddaSongLoader::LoadSongsFromCdda() {
-  QMutexLocker locker(&mutex_load_);
-  cdio_ = cdio_open(url_.path().toLocal8Bit().constData(), DRIVER_DEVICE);
-  if (cdio_ == nullptr) {
-    return;
+  // only dispatch a new thread for loading tracks if not already running.
+  if (!IsActive()) {
+    loading_future_ =
+        QtConcurrent::run(this, &CddaSongLoader::LoadSongsFromCdda);
   }
+}
+
+void CddaSongLoader::LoadSongsFromCdda() {
+  if (!may_load_) return;
+
   // Create gstreamer cdda element
   GError* error = nullptr;
   cdda_ = gst_element_make_from_uri(GST_URI_SRC, "cdda://", nullptr, &error);
@@ -120,58 +128,53 @@ void CddaSongLoader::LoadSongsFromCdda() {
 
   // Get TOC and TAG messages
   GstMessage* msg = nullptr;
-  GstMessage* msg_toc = nullptr;
-  GstMessage* msg_tag = nullptr;
-  while ((msg = gst_bus_timed_pop_filtered(
-              GST_ELEMENT_BUS(pipeline), 2 * GST_SECOND,
-              (GstMessageType)(GST_MESSAGE_TOC | GST_MESSAGE_TAG)))) {
+  GstMessageType msg_filter =
+      static_cast<GstMessageType>(GST_MESSAGE_TOC | GST_MESSAGE_TAG);
+  QString musicbrainz_discid;
+  while (may_load_ && msg_filter &&
+         (msg = gst_bus_timed_pop_filtered(GST_ELEMENT_BUS(pipeline),
+                                           10 * GST_SECOND, msg_filter))) {
     if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_TOC) {
-      if (msg_toc)
-        gst_message_unref(msg_toc);  // Shouldn't happen, but just in case
-      msg_toc = msg;
-    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_TAG) {
-      if (msg_tag) gst_message_unref(msg_tag);
-      msg_tag = msg;
-    }
-  }
-
-  // Handle TOC message: get tracks duration
-  if (msg_toc) {
-    GstToc* toc;
-    gst_message_parse_toc(msg_toc, &toc, nullptr);
-    if (toc) {
-      GList* entries = gst_toc_get_entries(toc);
-      if (entries && songs.size() <= g_list_length(entries)) {
-        int i = 0;
-        for (GList* node = entries; node != nullptr; node = node->next) {
-          GstTocEntry* entry = static_cast<GstTocEntry*>(node->data);
-          quint64 duration = 0;
-          gint64 start, stop;
-          if (gst_toc_entry_get_start_stop_times(entry, &start, &stop))
-            duration = stop - start;
-          songs[i++].set_length_nanosec(duration);
+      // Handle TOC message: get tracks duration
+      GstToc* toc;
+      gst_message_parse_toc(msg, &toc, nullptr);
+      if (toc) {
+        GList* entries = gst_toc_get_entries(toc);
+        if (entries && songs.size() <= g_list_length(entries)) {
+          int i = 0;
+          for (GList* node = entries; node != nullptr; node = node->next) {
+            GstTocEntry* entry = static_cast<GstTocEntry*>(node->data);
+            quint64 duration = 0;
+            gint64 start, stop;
+            if (gst_toc_entry_get_start_stop_times(entry, &start, &stop))
+              duration = stop - start;
+            songs[i++].set_length_nanosec(duration);
+          }
+          emit SongsDurationLoaded(songs);
+          msg_filter = static_cast<GstMessageType>(
+              static_cast<int>(msg_filter) ^ GST_MESSAGE_TOC);
         }
+        gst_toc_unref(toc);
       }
-    }
-    gst_message_unref(msg_toc);
-  }
-  emit SongsDurationLoaded(songs);
+    } else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_TAG) {
+      // Handle TAG message: generate MusicBrainz DiscId
 
-  // Handle TAG message: generate MusicBrainz DiscId
-  if (msg_tag) {
-    GstTagList* tags = nullptr;
-    gst_message_parse_tag(msg_tag, &tags);
-    char* string_mb = nullptr;
-    if (gst_tag_list_get_string(tags, GST_TAG_CDDA_MUSICBRAINZ_DISCID,
-                                &string_mb)) {
-      QString musicbrainz_discid(string_mb);
-      qLog(Info) << "MusicBrainz discid: " << musicbrainz_discid;
-      emit MusicBrainzDiscIdLoaded(musicbrainz_discid);
+      GstTagList* tags = nullptr;
+      gst_message_parse_tag(msg, &tags);
+      char* string_mb = nullptr;
+      if (gst_tag_list_get_string(tags, GST_TAG_CDDA_MUSICBRAINZ_DISCID,
+                                  &string_mb)) {
+        QString musicbrainz_discid = QString::fromUtf8(string_mb);
+        g_free(string_mb);
 
-      g_free(string_mb);
-      gst_message_unref(msg_tag);
+        qLog(Info) << "MusicBrainz discid: " << musicbrainz_discid;
+        emit MusicBrainzDiscIdLoaded(musicbrainz_discid);
+        msg_filter = static_cast<GstMessageType>(static_cast<int>(msg_filter) ^
+                                                 GST_MESSAGE_TAG);
+      }
       gst_tag_list_free(tags);
     }
+    gst_message_unref(msg);
   }
 
   gst_element_set_state(pipeline, GST_STATE_NULL);
@@ -216,16 +219,4 @@ void CddaSongLoader::AudioCDTagsLoaded(
     songs << song;
   }
   emit SongsMetadataLoaded(songs);
-}
-
-bool CddaSongLoader::HasChanged() {
-  if ((cdio_ && cdda_) && cdio_get_media_changed(cdio_) != 1) {
-    return false;
-  }
-  // Check if mutex is already token (i.e. init is already taking place)
-  if (!mutex_load_.tryLock()) {
-    return false;
-  }
-  mutex_load_.unlock();
-  return true;
 }

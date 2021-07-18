@@ -35,13 +35,18 @@ PlaylistParser::PlaylistParser(LibraryBackendInterface* library,
                                QObject* parent)
     : QObject(parent) {
   default_parser_ = new XSPFParser(library, this);
-  parsers_ << new M3UParser(library, this);
-  parsers_ << default_parser_;
-  parsers_ << new PLSParser(library, this);
-  parsers_ << new ASXParser(library, this);
-  parsers_ << new AsxIniParser(library, this);
-  parsers_ << new CueParser(library, this);
-  parsers_ << new WplParser(library, this);
+  AddParser(new M3UParser(library, this));
+  AddParser(default_parser_);
+  AddParser(new PLSParser(library, this));
+  AddParser(new ASXParser(library, this));
+  AddParser(new AsxIniParser(library, this));
+  AddParser(new CueParser(library, this));
+  AddParser(new WplParser(library, this));
+}
+
+void PlaylistParser::AddParser(ParserBase* parser) {
+  parsers_ << parser;
+  connect(parser, SIGNAL(Error(QString)), this, SIGNAL(Error(QString)));
 }
 
 QStringList PlaylistParser::file_extensions() const {
@@ -129,6 +134,7 @@ SongList PlaylistParser::LoadFromFile(const QString& filename) const {
   // Find a parser that supports this file extension
   ParserBase* parser = ParserForExtension(info.suffix());
   if (!parser) {
+    emit Error(tr("Unknown filetype: %1").arg(filename));
     qLog(Warning) << "Unknown filetype:" << filename;
     return SongList();
   }
@@ -159,6 +165,7 @@ void PlaylistParser::Save(const SongList& songs, const QString& filename,
   // Find a parser that supports this file extension
   ParserBase* parser = ParserForExtension(info.suffix());
   if (!parser) {
+    emit Error(tr("Unknown filetype: %1").arg(filename));
     qLog(Warning) << "Unknown filetype:" << filename;
     return;
   }

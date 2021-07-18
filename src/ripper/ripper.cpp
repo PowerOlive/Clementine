@@ -38,16 +38,15 @@ const char kWavFileTypeFormatChunk[] = "WAVEfmt ";
 const char kWavDataString[] = "data";
 }  // namespace
 
-Ripper::Ripper(QObject* parent)
+Ripper::Ripper(CdIo_t* cdio, QObject* parent)
     : QObject(parent),
+      cdio_(cdio),
       transcoder_(new Transcoder(this)),
       cancel_requested_(false),
       finished_success_(0),
       finished_failed_(0),
       files_tagged_(0) {
-  cdio_ = cdio_open(NULL, DRIVER_UNKNOWN);
-
-  connect(this, SIGNAL(RippingComplete()), transcoder_, SLOT(Start()));
+  Q_ASSERT(cdio_);  // TODO: error handling
   connect(transcoder_, SIGNAL(JobComplete(QString, QString, bool)),
           SLOT(TranscodingJobComplete(QString, QString, bool)));
   connect(transcoder_, SIGNAL(AllJobsComplete()),
@@ -55,7 +54,7 @@ Ripper::Ripper(QObject* parent)
   connect(transcoder_, SIGNAL(LogLine(QString)), SLOT(LogLine(QString)));
 }
 
-Ripper::~Ripper() { cdio_destroy(cdio_); }
+Ripper::~Ripper() {}
 
 void Ripper::AddTrack(int track_number, const QString& title,
                       const QString& transcoded_filename,
@@ -90,23 +89,6 @@ int Ripper::AddedTracks() const { return tracks_.length(); }
 
 void Ripper::ClearTracks() { tracks_.clear(); }
 
-bool Ripper::CheckCDIOIsValid() {
-  if (cdio_) {
-    cdio_destroy(cdio_);
-  }
-  cdio_ = cdio_open(NULL, DRIVER_UNKNOWN);
-  // Refresh the status of the cd media. This will prevent unnecessary
-  // rebuilds of the track list table.
-  if (cdio_) {
-    cdio_get_media_changed(cdio_);
-  }
-  return cdio_;
-}
-
-bool Ripper::MediaChanged() const {
-  return cdio_ && cdio_get_media_changed(cdio_);
-}
-
 void Ripper::Start() {
   {
     QMutexLocker l(&mutex_);
@@ -125,7 +107,7 @@ void Ripper::Cancel() {
   }
   transcoder_->Cancel();
   RemoveTemporaryDirectory();
-  emit(Cancelled());
+  emit Cancelled();
 }
 
 void Ripper::TranscodingJobComplete(const QString& input, const QString& output,
@@ -252,7 +234,8 @@ void Ripper::Rip() {
     transcoder_->AddJob(it->temporary_filename, it->preset,
                         it->transcoded_filename);
   }
-  emit(RippingComplete());
+  transcoder_->Start();
+  emit RippingComplete();
 }
 
 // The progress interval is [0, 200*AddedTracks()], where the first
@@ -306,7 +289,7 @@ void Ripper::FileTagged(TagReaderReply* reply) {
               << "files";
   if (files_tagged_ == tracks_.length()) {
     qLog(Debug) << "CD ripper finished.";
-    emit(Finished());
+    emit Finished();
   }
 
   reply->deleteLater();

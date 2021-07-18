@@ -43,20 +43,20 @@ class MtpDevice : public ConnectedDevice {
                          << "gphoto2";
   }
 
-  void Init();
-  void ConnectAsync();
+  bool Init() override;
+  void ConnectAsync() override;
 
-  bool GetSupportedFiletypes(QList<Song::FileType>* ret);
+  bool GetSupportedFiletypes(QList<Song::FileType>* ret) override;
   int GetFreeSpace();
   int GetCapacity();
 
-  bool StartCopy(QList<Song::FileType>* supported_types);
-  bool CopyToStorage(const CopyJob& job);
-  void FinishCopy(bool success);
+  bool StartCopy(QList<Song::FileType>* supported_types) override;
+  bool CopyToStorage(const CopyJob& job) override;
+  void FinishCopy(bool success) override;
 
-  void StartDelete();
-  bool DeleteFromStorage(const DeleteJob& job);
-  void FinishDelete(bool success);
+  void StartDelete() override;
+  bool DeleteFromStorage(const DeleteJob& job) override;
+  void FinishDelete(bool success) override;
 
  private slots:
   void LoadFinished(bool success);

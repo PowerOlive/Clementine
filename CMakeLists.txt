@@ -13,6 +13,7 @@ include(cmake/SpotifyVersion.cmake)
 include(cmake/OptionalSource.cmake)
 include(cmake/Format.cmake)
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE INTERNAL "")
 
 if (CMAKE_CXX_COMPILER MATCHES ".*clang")
   set(CMAKE_COMPILER_IS_CLANGXX 1)
@@ -288,10 +289,6 @@ optional_component(DBUS ON "D-Bus support"
 )
 
 optional_component(WIIMOTEDEV ON "Wiimote support"
-  DEPENDS "D-Bus support" Qt5DBus_FOUND
-)
-
-optional_component(DEVICEKIT ON "Devices: DeviceKit backend"
   DEPENDS "D-Bus support" Qt5DBus_FOUND
 )
 

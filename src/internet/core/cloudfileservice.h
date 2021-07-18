@@ -43,17 +43,18 @@ class CloudFileService : public InternetService {
                    const QIcon& icon, SettingsDialog::Page settings_page);
 
   // InternetService
-  virtual QStandardItem* CreateRootItem();
-  virtual void LazyPopulate(QStandardItem* item);
+  virtual QStandardItem* CreateRootItem() override;
+  virtual void LazyPopulate(QStandardItem* item) override;
 
   virtual bool has_credentials() const = 0;
   bool is_indexing() const { return indexing_task_id_ != -1; }
 
+  bool ConfigRequired() override { return !has_credentials(); }
  signals:
   void AllIndexingTasksFinished();
 
  public slots:
-  void ShowSettingsDialog();
+  void ShowConfig() override;
 
  protected:
   virtual void Connect() = 0;

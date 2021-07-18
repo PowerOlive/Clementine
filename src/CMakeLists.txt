@@ -98,6 +98,7 @@ set(SOURCES
   core/signalchecker.cpp
   core/song.cpp
   core/songloader.cpp
+  core/songpathparser.cpp
   core/stylesheetloader.cpp
   core/tagreaderclient.cpp
   core/taskmanager.cpp
@@ -322,6 +323,7 @@ set(SOURCES
   transcoder/transcodedialog.cpp
   transcoder/transcoder.cpp
   transcoder/transcoderoptionsaac.cpp
+  transcoder/transcoderoptionsavaac.cpp
   transcoder/transcoderoptionsdialog.cpp
   transcoder/transcoderoptionserror.cpp
   transcoder/transcoderoptionsfdkaac.cpp
@@ -367,6 +369,7 @@ set(SOURCES
   ui/settingsdialog.cpp
   ui/settingspage.cpp
   ui/splash.cpp
+  ui/songmetadatasettingspage.cpp
   ui/standarditemiconloader.cpp
   ui/streamdetailsdialog.cpp
   ui/systemtrayicon.cpp
@@ -628,6 +631,7 @@ set(HEADERS
 
   transcoder/transcodedialog.h
   transcoder/transcoder.h
+  transcoder/transcoderoptionsavaac.h
   transcoder/transcoderoptionsdialog.h
   transcoder/transcoderoptionsmp3.h
   transcoder/transcoderoptionsfdkaac.h
@@ -663,6 +667,7 @@ set(HEADERS
   ui/settingscategory.h
   ui/settingsdialog.h
   ui/settingspage.h
+  ui/songmetadatasettingspage.h
   ui/standarditemiconloader.h
   ui/streamdetailsdialog.h
   ui/systemtrayicon.h
@@ -760,6 +765,7 @@ set(UI
   transcoder/transcodedialog.ui
   transcoder/transcodelogdialog.ui
   transcoder/transcoderoptionsaac.ui
+  transcoder/transcoderoptionsavaac.ui
   transcoder/transcoderoptionsdialog.ui
   transcoder/transcoderoptionserror.ui
   transcoder/transcoderoptionsfdkaac.ui
@@ -795,6 +801,7 @@ set(UI
   ui/organiseerrordialog.ui
   ui/playbacksettingspage.ui
   ui/settingsdialog.ui
+  ui/songmetadatasettingspage.ui
   ui/streamdetailsdialog.ui
   ui/trackselectiondialog.ui
 
@@ -881,12 +888,16 @@ optional_source(HAVE_SPOTIFY
     internet/spotify/spotifyserver.cpp
     internet/spotify/spotifyservice.cpp
     internet/spotify/spotifysettingspage.cpp
+    internet/spotifywebapi/spotifywebapiservice.cpp
     globalsearch/spotifysearchprovider.cpp
+    globalsearch/spotifywebapisearchprovider.cpp
   HEADERS
     globalsearch/spotifysearchprovider.h
+    globalsearch/spotifywebapisearchprovider.h
     internet/spotify/spotifyserver.h
     internet/spotify/spotifyservice.h
     internet/spotify/spotifysettingspage.h
+    internet/spotifywebapi/spotifywebapiservice.h
   UI
     internet/spotify/spotifysettingspage.ui
 )
@@ -1012,20 +1023,6 @@ if(UNIX AND HAVE_DBUS)
   list(APPEND HEADERS ${CMAKE_CURRENT_BINARY_DIR}/dbus/avahientrygroup.h)
   list(APPEND SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dbus/avahientrygroup.cpp)
 
-  # DeviceKit DBUS interfaces
-  if(HAVE_DEVICEKIT)
-    set_source_files_properties(dbus/org.freedesktop.UDisks.xml
-        PROPERTIES NO_NAMESPACE dbus/udisks)
-    set_source_files_properties(dbus/org.freedesktop.UDisks.Device.xml
-        PROPERTIES NO_NAMESPACE dbus/udisksdevice)
-    qt5_add_dbus_interface(SOURCES
-        dbus/org.freedesktop.UDisks.xml
-        dbus/udisks)
-    qt5_add_dbus_interface(SOURCES
-        dbus/org.freedesktop.UDisks.Device.xml
-        dbus/udisksdevice)
-  endif(HAVE_DEVICEKIT)
-
   if(HAVE_UDISKS2)
       set_source_files_properties(dbus/org.freedesktop.DBus.ObjectManager.xml
           PROPERTIES NO_NAMESPACE dbus/objectmanager INCLUDE dbus/metatypes.h)
@@ -1082,11 +1079,6 @@ optional_source(HAVE_WIIMOTEDEV
     wiimotedev/shortcuts.h
     wiimotedev/wiimotesettingspage.h
     wiimotedev/wiimoteshortcutgrabber.h
-)
-
-optional_source(HAVE_DEVICEKIT
-  SOURCES devices/devicekitlister.cpp
-  HEADERS devices/devicekitlister.h
 )
 
 optional_source(HAVE_UDISKS2
@@ -1326,6 +1318,7 @@ if(HAVE_LIBLASTFM)
 endif(HAVE_LIBLASTFM)
 
 if(HAVE_LIBGPOD)
+  link_directories(${LIBGPOD_LIBRARY_DIRS})
   target_link_libraries(clementine_lib ${LIBGPOD_LIBRARIES})
 endif(HAVE_LIBGPOD)
 
@@ -1342,6 +1335,7 @@ if(HAVE_MOODBAR)
 endif()
 
 if(HAVE_LIBMTP)
+  link_directories(${LIBMTP_LIBRARY_DIRS})
   target_link_libraries(clementine_lib ${LIBMTP_LIBRARIES})
 endif(HAVE_LIBMTP)
 

@@ -213,7 +213,8 @@ SongLoader::Result SongLoader::LoadLocal(const QString& filename) {
 SongLoader::Result SongLoader::LoadLocalAsync(const QString& filename) {
   // First check to see if it's a directory - if so we will load all the songs
   // inside right away.
-  if (QFileInfo(filename).isDir()) {
+  QFileInfo info(filename);
+  if (info.isDir()) {
     LoadLocalDirectory(filename);
     return Success;
   }
@@ -239,7 +240,8 @@ SongLoader::Result SongLoader::LoadLocalAsync(const QString& filename) {
     qLog(Debug) << "Parsing using" << parser->name();
 
     // It's a playlist!
-    LoadPlaylist(parser, filename);
+    file.reset();
+    songs_ = parser->Load(&file, filename, info.path());
     return Success;
   }
 
@@ -252,7 +254,7 @@ SongLoader::Result SongLoader::LoadLocalAsync(const QString& filename) {
 
     SongList song_list = cue_parser_->Load(&cue, matching_cue,
                                            QDir(filename.section('/', 0, -2)));
-    for (Song song : song_list) {
+    for (const Song& song : song_list) {
       if (song.is_valid()) songs_ << song;
     }
     return Success;
@@ -292,12 +294,6 @@ void SongLoader::EffectiveSongLoad(Song* song) {
     QString filename = song->url().toLocalFile();
     TagReaderClient::Instance()->ReadFileBlocking(filename, song);
   }
-}
-
-void SongLoader::LoadPlaylist(ParserBase* parser, const QString& filename) {
-  QFile file(filename);
-  file.open(QIODevice::ReadOnly);
-  songs_ = parser->Load(&file, filename, QFileInfo(filename).path());
 }
 
 static bool CompareSongs(const Song& left, const Song& right) {
@@ -425,6 +421,7 @@ SongLoader::Result SongLoader::LoadRemote() {
   CHECKED_GCONNECT(typefind, "have-type", &TypeFound, this);
   gst_bus_set_sync_handler(bus, BusCallbackSync, this, NULL);
   gst_bus_add_watch(bus, BusCallback, this);
+  gst_object_unref(bus);
 
   // Add a probe to the sink so we can capture the data if it's a playlist
   GstPad* pad = gst_element_get_static_pad(fakesink, "sink");
@@ -637,13 +634,12 @@ void SongLoader::StopTypefindAsync(bool success) {
 
 bool SongLoader::LoadRemotePlaylist(const QUrl& url) {
   // This function makes a remote request for the given URL and, if its MIME
-  // type corresponds to a known playlist type, saves the content to a
-  // temporary file, loads it, and returns true.
+  // type corresponds to a known playlist type, it loads it, and returns true.
   // If the URL does not point to a playlist file we could handle,
   // it returns false.
 
   NetworkAccessManager manager;
-  QNetworkRequest req = QNetworkRequest(url);
+  QNetworkRequest req(url);
 
   // Getting headers:
   QNetworkReply* const headers_reply = manager.head(req);
@@ -674,21 +670,8 @@ bool SongLoader::LoadRemotePlaylist(const QUrl& url) {
     return false;
   }
 
-  // Save them to a temporary file...
-  QString playlist_filename =
-      Utilities::SaveToTemporaryFile(data_reply->readAll());
-  if (playlist_filename.isEmpty()) {
-    qLog(Error) << url.toString()
-                << "could not write contents to temporary file";
-    return false;
-  }
+  qLog(Debug) << "Loading" << url.toString() << "with MIME" << mime_type;
 
-  qLog(Debug) << url.toString() << "with MIME" << mime_type << "loading from"
-              << playlist_filename;
-
-  // ...and load it.
-  LoadPlaylist(parser, playlist_filename);
-
-  QFile(playlist_filename).remove();
+  songs_ = parser->Load(data_reply);
   return true;
 }

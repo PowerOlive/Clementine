@@ -433,7 +433,8 @@ void RadioBrowserService::ResolveStationUrl(const QUrl& original_url) {
     Song ret;
     ret.set_valid(true);
     ret.set_title(item["name"].toString());
-    QUrl url(item["url"].toString());
+    QUrl url(item["url_resolved"].toString());
+    if (url.isEmpty()) url.setUrl(item["url"].toString());
     ret.set_url(url);
     ret.set_art_automatic(item["favicon"].toString());
 

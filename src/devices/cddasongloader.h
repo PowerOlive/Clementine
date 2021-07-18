@@ -18,13 +18,14 @@
 #ifndef CDDASONGLOADER_H
 #define CDDASONGLOADER_H
 
-#include <QMutex>
+#include <QFuture>
 #include <QObject>
 #include <QUrl>
 
 // These must come after Qt includes (issue 3247)
-#include <cdio/cdio.h>
 #include <gst/audio/gstaudiocdsrc.h>
+
+#include <atomic>
 
 #include "core/song.h"
 #include "musicbrainz/musicbrainzclient.h"
@@ -44,7 +45,7 @@ class CddaSongLoader : public QObject {
   // Signals declared below will be emitted anytime new information will be
   // available.
   void LoadSongs();
-  bool HasChanged();
+  bool IsActive() const;
 
  signals:
   void SongsLoaded(const SongList& songs);
@@ -63,8 +64,8 @@ class CddaSongLoader : public QObject {
 
   QUrl url_;
   GstElement* cdda_;
-  CdIo_t* cdio_;
-  QMutex mutex_load_;
+  QFuture<void> loading_future_;
+  std::atomic<bool> may_load_;
 };
 
 #endif  // CDDASONGLOADER_H

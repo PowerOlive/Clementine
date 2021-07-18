@@ -18,30 +18,42 @@
 #ifndef CDDADEVICE_H
 #define CDDADEVICE_H
 
-#include <QMutex>
+#include <QTimer>
 
 // These must come after Qt includes (issue 3247)
 #include <cdio/cdio.h>
-#include <gst/audio/gstaudiocdsrc.h>
 
 #include "cddasongloader.h"
 #include "connecteddevice.h"
 #include "core/song.h"
-#include "musicbrainz/musicbrainzclient.h"
+
+class QUrl;
 
 class CddaDevice : public ConnectedDevice {
   Q_OBJECT
 
  public:
+  // Initializes the CddaDevice but does not open a handle to the device.
+  // Using code MUST call Init() after construction before calling and
+  // check that it returns true any other methods, to ensure that a valid
+  // device handle was correctly opened. Using class methods without
+  // a valid device handle is undefined behavior and might result in crashes.
   Q_INVOKABLE CddaDevice(const QUrl& url, DeviceLister* lister,
                          const QString& unique_id, DeviceManager* manager,
                          Application* app, int database_id, bool first_time);
   ~CddaDevice();
 
-  void Init();
-  void Refresh();
-  bool CopyToStorage(const MusicStorage::CopyJob&) { return false; }
-  bool DeleteFromStorage(const MusicStorage::DeleteJob&) { return false; }
+  bool Init() override;
+  bool CopyToStorage(const MusicStorage::CopyJob&) override { return false; }
+  bool DeleteFromStorage(const MusicStorage::DeleteJob&) override {
+    return false;
+  }
+  CddaSongLoader* loader();
+  // Access to the raw cdio device handle.
+  CdIo_t* raw_cdio();  // TODO: not ideal, but Ripper needs this currently
+  // Check whether a valid device handle was opened.
+  bool IsValid() const;
+  void WatchForDiscChanges(bool watch);
 
   static QStringList url_schemes() { return QStringList() << "cdda"; }
 
@@ -58,11 +70,17 @@ class CddaDevice : public ConnectedDevice {
 
  signals:
   void SongsDiscovered(const SongList& songs);
+  void DiscChanged();
 
  private slots:
   void SongsLoaded(const SongList& songs);
+  void CheckDiscChanged();
 
  private:
+  void LoadSongs();
+
+  CdIo_t* cdio_;
+  QTimer disc_changed_timer_;
   CddaSongLoader cdda_song_loader_;
 };
 

@@ -39,8 +39,6 @@ class SubsonicLibraryScanner;
 
 class SubsonicService : public InternetService {
   Q_OBJECT
-  Q_ENUMS(LoginState)
-  Q_ENUMS(ApiError)
 
  public:
   SubsonicService(Application* app, InternetModel* parent);
@@ -63,6 +61,7 @@ class SubsonicService : public InternetService {
     LoginState_RedirectLimitExceeded,
     LoginState_RedirectNoUrl,
   };
+  Q_ENUM(LoginState)
 
   enum ApiError {
     ApiError_Generic = 0,
@@ -74,6 +73,7 @@ class SubsonicService : public InternetService {
     ApiError_Unlicensed = 60,
     ApiError_NotFound = 70,
   };
+  Q_ENUM(ApiError)
 
   enum Type {
     Type_Artist = InternetModel::TypeCount,
@@ -102,6 +102,10 @@ class SubsonicService : public InternetService {
              const bool& verifycert);
 
   LoginState login_state() const { return login_state_; }
+
+  bool ConfigRequired() override {
+    return login_state() != LoginState_Loggedin;
+  }
 
   // Subsonic API methods
   void Ping();

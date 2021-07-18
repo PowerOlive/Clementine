@@ -1,5 +1,6 @@
 /* This file is part of Clementine.
  Copyright 2014, Andre Siviero <altsiviero@gmail.com>
+ Copyright 2021, Lukas Prediger <lumip@lumip.de>
 
  Clementine is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -19,11 +20,9 @@
 #define SRC_RIPPER_RIPCDDIALOG_H_
 
 #include <QDialog>
-#include <QFile>
 #include <memory>
 
 #include "core/song.h"
-#include "core/tagreaderclient.h"
 
 class QCheckBox;
 class QCloseEvent;
@@ -33,18 +32,21 @@ class QShowEvent;
 class CddaSongLoader;
 class Ripper;
 class Ui_RipCDDialog;
+class CddaDevice;
+class DeviceManager;
+class DeviceInfo;
 
 class RipCDDialog : public QDialog {
   Q_OBJECT
 
  public:
-  explicit RipCDDialog(QWidget* parent = nullptr);
+  explicit RipCDDialog(DeviceManager* device_manager,
+                       QWidget* parent = nullptr);
   ~RipCDDialog();
-  bool CheckCDIOIsValid();
 
  protected:
-  void closeEvent(QCloseEvent* event);
-  void showEvent(QShowEvent* event);
+  void closeEvent(QCloseEvent* event) override;
+  void showEvent(QShowEvent* event) override;
 
  private slots:
   void ClickedRipButton();
@@ -53,12 +55,19 @@ class RipCDDialog : public QDialog {
   void SelectAll();
   void SelectNone();
   void InvertSelection();
-  void Finished();
-  void Cancelled();
+  void DeviceSelected(int device_index);
+  void Finished(Ripper* ripper);
+  void Cancelled(Ripper* ripper);
   void SetupProgressBarLimits(int min, int max);
   void UpdateProgressBar(int progress);
+  // Initializes track list table based on preliminary song list with durations
+  // but without metadata.
   void BuildTrackListTable(const SongList& songs);
+  // Update track list based on metadata.
+  void UpdateTrackListTable(const SongList& songs);
+  // Update album information with metadata.
   void AddAlbumMetadataFromMusicBrainz(const SongList& songs);
+  void DiscChanged();
 
  private:
   static const char* kSettingsGroup;
@@ -72,6 +81,7 @@ class RipCDDialog : public QDialog {
   QString ParseFileFormatString(const QString& file_format, int track_no) const;
   void SetWorking(bool working);
   void ResetDialog();
+  void InitializeDevices();
 
   QList<QCheckBox*> checkboxes_;
   QList<QLineEdit*> track_names_;
@@ -80,8 +90,10 @@ class RipCDDialog : public QDialog {
   QPushButton* close_button_;
   QPushButton* rip_button_;
   std::unique_ptr<Ui_RipCDDialog> ui_;
-  Ripper* ripper_;
+  DeviceManager* device_manager_;
+  QList<DeviceInfo*> cdda_devices_;
   bool working_;
+  std::shared_ptr<CddaDevice> cdda_device_;
   CddaSongLoader* loader_;
 };
 #endif  // SRC_RIPPER_RIPCDDIALOG_H_
